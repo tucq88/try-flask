@@ -1,0 +1,27 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pylint = "*"
+pytest = "*"
+flake8 = "*"
+isort = "*"
+ddtrace = "*"
+sentry-sdk = "*"
+faker = "*"
+autopep8 = "*"
+
+[packages]
+flask = "*"
+flask-cors = "*"
+sqlalchemy = "==1.3.0b1"
+alembic = "*"
+flask-restful = "*"
+python-dotenv = "*"
+requests = "*"
+psycopg2 = "*"
+
+[requires]
+python_version = "3.7"
