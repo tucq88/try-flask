@@ -1,3 +1,4 @@
 from app import Bootstrap
 
-app = Bootstrap(__name__).instance()
+bootstrap = Bootstrap(__name__)
+app = bootstrap.instance()

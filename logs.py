@@ -1,6 +1,7 @@
 import os
 import logging.handlers
 
+
 def register_logging(app):
     if app.debug or app.testing:
         return
