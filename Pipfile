@@ -23,6 +23,8 @@ python-dotenv = "*"
 requests = "*"
 psycopg2 = "*"
 psycopg2-binary = "*"
+marshmallow-sqlalchemy = "*"
+zope-sqlalchemy = "*"
 
 [requires]
 python_version = "3.7"
