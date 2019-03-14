@@ -1,0 +1,174 @@
+import sqlalchemy as sa
+# from paginate_sqlalchemy import SqlalchemyOrmPage
+import types
+
+log = __import__('logging').getLogger(__name__)
+
+
+class CRUD():
+    db = None
+    model = None
+    schema = None
+
+    def find_by_id(self, id):
+        q = self.db.query(self.model).filter(self.model.id == id)
+        return q.first()
+
+    def create(self, flush=True, mapping=None, **data):
+        try:
+            obj = self.model()
+            for k in data:
+                p = k
+                if mapping and k in mapping:
+                    p = mapping.get(k)
+
+                if hasattr(obj, k):
+                    setattr(obj, k, data[p])
+            self.db.add(obj)
+            if flush:
+                self.db.flush()
+                log.info('created new %s=%s', self.model.__name__, obj.id)
+            return obj
+        except sa.exc.IntegrityError as e:
+            log.info('Create new "%s" with errors %s', self.model.__name__, e)
+            raise
+
+    def update(self, obj, flush=True, only=None, **data):
+        if obj:
+            for k in data:
+                if hasattr(obj, k) and (only is None or k in only):
+                    setattr(obj, k, data.get(k))
+        if flush:
+            self.db.flush()
+        return obj
+
+    def delete(self, obj, flush=True):
+        try:
+            self.db.delete(obj)
+            if flush:
+                self.db.flush()
+            log.info('Deleted %s=%s', self.model.__name__, obj.id)
+            return True
+        except sa.exc.IntegrityError as e:
+            log.info('Delete %s with errors: %s', self.model.__name__, e)
+            raise
+
+    def find(self, request=None, **options):
+        """
+        :param request
+        :param options:
+                filters: [],
+
+                matching(model, sa): a function return list in filter(*[])
+
+                sort(model, sa): a function return list
+                for order_by(*[user.name.desc()])
+
+                sort_text: first_name:asc
+
+                join(model, sa):
+
+                search: function return list field to search
+
+                search_text: search string
+
+                pagination: True
+        :return:
+        """
+
+        for k in options:
+            o = options[k]
+            options[k] = o(self.model, sa) if isinstance(
+                o, types.FunctionType) else o
+
+        data = self.db.query(self.model)
+
+        if 'outerjoin' in options and options['outerjoin']:
+            for j in options['outerjoin']:
+                data = data.outerjoin(*j)
+
+        if 'join' in options and options['join']:
+            for j in options['join']:
+                data = data.join(*j)
+
+        filters = []
+
+        has_search = ('search_text' in options
+                      and 'search' in options
+                      and options['search'])
+        if has_search:
+            search = []
+            text = options['search_text'].split(
+            ) if options['search_text'] is not None else []
+
+            for field in options['search']:
+                for i in [field.ilike('%' + t + '%') for t in text]:
+                    search.append(i)
+            if len(search) > 0:
+                filters.append(sa.or_(*search))
+
+        # use key, value in dict as options to match extractly between key and
+        # attr in model
+        for key, value in options.items():
+            if hasattr(self.model, key):
+                filters.append(sa.and_(getattr(self.model, key) == value))
+
+        # add filters use lambda
+        if 'matching' in options and len(options['matching']):
+            filters.extend(options['matching'])
+
+        # add filter use list
+        if 'filters' in options and len(options['filters']):
+            filters.extend(options['filters'])
+
+        if len(filters) > 0:
+            data = data.filter(*filters)
+
+        has_sort = ('sort' in options
+                    and 'sort_text' in options
+                    and options['sort_text'])
+        if has_sort:
+            text = options['sort_text'].split('+')
+            orders = []
+            for t in text:
+                key, by = t.split(':')
+                key = options['sort'].get(key)
+                if not key:
+                    continue
+                orders.append(getattr(key, by)())
+
+            if len(orders):
+                data = data.order_by(*orders)
+
+        elif ('order' in options
+                and options['order']
+                and len(options['order']) > 0):
+            data = data.order_by(*options['order'])
+
+        # if request is not None or ('pagination' in options
+        #  and options['pagination']):
+        #     query_params = request.GET.mixed()
+
+        #     page = 1
+        #     if 'page' in query_params:
+        #         page = query_params['page']
+
+        #     def url_maker(next_page):
+        #         # replace page param with values generated by paginator
+        #         query_params['page'] = next_page
+
+        #         return request.current_route_url(_query=query_params)
+
+        #     return SqlalchemyOrmPage(
+        #         data, page=page, items_per_page=10, url_maker=url_maker)
+
+        return data
+
+    def all(self, options=None):
+        q = self.db.query(self.model)
+        # if issubclass(self.model):
+        #     q = q.filter(self.model.is_deleted == sa.false())
+        return self.schema().to_json(q.all(), many=True)
+
+    def to_json(self, obj):
+        return self.schema().to_json(obj)
